@@ -92,8 +92,8 @@ func main() {
 	if err := tmp.Execute(
 		stringBuilder,
 		map[string]any{
-			"DeclTokenName": "{{.DeclTokenName}}",
-			"PackageName": "{{.PackageName}}",
+			"DeclTokenName": "{{.StructName}}",
+			"PackageName": "{{.StructName}}",
 		},
 	); err != nil {
 		fmt.Println(err.Error())
