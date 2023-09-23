@@ -8,6 +8,11 @@ import (
 var programTemplate = `package main
 
 import (
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"os"
 	"strings"
 	"text/template"
 
