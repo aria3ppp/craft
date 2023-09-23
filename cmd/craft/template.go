@@ -130,7 +130,7 @@ type GenDecl struct {
 	EndOffset   int
 }
 
-func generateProgram(values Values) (string, error) {
+func generateProgram(values Values, outputPath string) (string, error) {
 	tmp, err := template.New("program").Parse(programTemplate)
 	if err != nil {
 		return "", err

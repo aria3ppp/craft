@@ -4,7 +4,7 @@ import (
 	"go/ast"
 )
 
-func Hello(st *ast.GenDecl) (string, error) {
+func Hello(st *ast.StructType) (string, error) {
 	// structName := st.End()
 	// st.Fields.List[0].Type
 

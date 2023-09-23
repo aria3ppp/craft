@@ -11,7 +11,7 @@
             "mode": "auto",
             "program": "${workspaceFolder}/cmd/craft",
             "cwd": "${workspaceFolder}/cmd/ast/",
-            "args": ["github.com/aira3ppp/craft/example/macros/hello"],
+            "args": ["-by", "github.com/aira3ppp/craft/example/macros/hello", "-to", "hello.gen.go"],
             "env": {
                 "GOFILE": "ast.go",
                 "GOLINE": "69",

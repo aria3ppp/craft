@@ -1,4 +1,4 @@
-//go:generate craft -by github.com/aira3ppp/craft/example/macros/hello -to hello.gen.go
+//go:generate craft -by github.com/aria3ppp/craft/example/macros/hello -to hello.gen.go
 
 package main
 

@@ -41,17 +41,9 @@ func main() {
 	printEnv()
 	defer fmt.Println()
 
-	if len(os.Args) == 1 {
-		fmt.Printf("error: no macro package provided\n")
-		os.Exit(2)
-		return
-	}
-
 	goFile := os.Getenv("GOFILE")
 
-	macroPackage := os.Args[1]
-
-	pkgName := path.Base(macroPackage)
+	pkgName := path.Base(macroImportPath)
 
 	hashTagRegexp, err := regexp.Compile(fmt.Sprintf(`#\[%s\.(.*)\]`, pkgName))
 	if err != nil {
@@ -95,7 +87,7 @@ func main() {
 								Macro: Macro{
 									Name:               macroDefinitionName,
 									CraftedProgramPath: filepath.Join(os.Getenv("PWD"), goFile),
-									PackageImportPath:  macroPackage,
+									PackageImportPath:  macroImportPath,
 								},
 								GenDecl: GenDecl{
 									StartOffset: fs.Position(gd.Pos()).Offset,
@@ -104,6 +96,7 @@ func main() {
 								DeclTokenName: typeSpec.Name.Name,
 								PackageName:   file.Name.Name,
 							},
+							filepath.Join(os.Getenv("PWD"), macroOutputFilename),
 						)
 						if err != nil {
 							fmt.Printf("error: failed generating program: %s\n", err)

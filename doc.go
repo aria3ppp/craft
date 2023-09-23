@@ -3,7 +3,7 @@ Craft bring macro meta programming to golang world!
 To use a macro in your program add the following go:generate line and hash tags:
 
 ```go
-//go:generate craft github.com/aria3ppp/craft/example/macros/hello
+///go:generate craft -by github.com/aria3ppp/craft/example/macros/hello -to output.gen.go
 
 //#[hello.Hello]
 type Name string
