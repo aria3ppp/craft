@@ -93,10 +93,10 @@ func main() {
 									StartOffset: fs.Position(gd.Pos()).Offset,
 									EndOffset:   fs.Position(gd.End()).Offset,
 								},
-								DeclTokenName: typeSpec.Name.Name,
-								PackageName:   file.Name.Name,
+								OutputFilename: filepath.Join(os.Getenv("PWD"), macroOutputFilename),
+								StructName:     typeSpec.Name.Name,
+								PackageName:    file.Name.Name,
 							},
-							filepath.Join(os.Getenv("PWD"), macroOutputFilename),
 						)
 						if err != nil {
 							fmt.Printf("error: failed generating program: %s\n", err)

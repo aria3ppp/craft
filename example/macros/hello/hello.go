@@ -13,9 +13,9 @@ func Hello(st *ast.StructType) (string, error) {
 
 	programTemplate := `package {{.PackageName}}
 
-	func (this *{{.StructName}}) Hello() string {
-		return "Hello {{.StructName}}"
-	}
+func (this *{{.StructName}}) Hello() string {
+	return "Hello {{.StructName}}"
+}
 	`
 
 	return programTemplate, nil

@@ -22,6 +22,11 @@ type PhonyStruct struct {
 }
 
 func main() {
+	// call generated Hello method
+	var ps PhonyStruct
+	fmt.Println(ps.Hello())
+	fmt.Println()
+
 	// Create a new file set.
 	fs := token.NewFileSet()
 

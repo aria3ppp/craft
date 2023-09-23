@@ -92,7 +92,7 @@ func main() {
 	if err := tmp.Execute(
 		stringBuilder,
 		map[string]any{
-			"DeclTokenName": "{{.DeclTokenName}}",
+			"StructName": "{{.StructName}}",
 			"PackageName": "{{.PackageName}}",
 		},
 	); err != nil {
@@ -111,17 +111,30 @@ func main() {
 }
 
 func craft(programString string) error {
-	fmt.Println(programString)
+	file, err := os.Create("{{.OutputFilename}}")
+	if err != nil {
+		return err
+	}
+
+	if _, err := file.WriteString(programString); err != nil {
+		return err
+	}
+	
+	if err := file.Close(); err != nil {
+		return err
+	}
+
 	return nil
 }
 `
 
 type Values struct {
-	Macro   Macro
-	GenDecl GenDecl
+	Macro          Macro
+	GenDecl        GenDecl
+	OutputFilename string
 
-	DeclTokenName string
-	PackageName   string
+	StructName  string
+	PackageName string
 }
 
 type Macro struct {
@@ -135,7 +148,7 @@ type GenDecl struct {
 	EndOffset   int
 }
 
-func generateProgram(values Values, outputPath string) (string, error) {
+func generateProgram(values Values) (string, error) {
 	tmp, err := template.New("program").Parse(programTemplate)
 	if err != nil {
 		return "", err
