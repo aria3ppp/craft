@@ -49,7 +49,13 @@ func main() {
 
 	structDef := string(buffer[:bytesRead])
 
-	src := "package main\n\n"+ structDef
+	var src string
+
+	if {{.NeedTypePrepend}} {
+		src = "package main\n\ntype "+ structDef
+	} else {
+		src = "package main\n\n"+ structDef
+	}
 
 	fs := token.NewFileSet()
 
@@ -129,9 +135,10 @@ func craft(programString string) error {
 `
 
 type Values struct {
-	Macro          Macro
-	GenDecl        GenDecl
-	OutputFilename string
+	Macro           Macro
+	GenDecl         GenDecl
+	OutputFilename  string
+	NeedTypePrepend bool
 
 	StructName  string
 	PackageName string

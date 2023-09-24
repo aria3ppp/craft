@@ -1,4 +1,4 @@
-//go:generate craft -by github.com/aria3ppp/craft/example/macros/hello -to hello.gen.go
+//go:generate craft github.com/aria3ppp/craft/example/macros/hello
 
 package main
 
@@ -21,10 +21,26 @@ type PhonyStruct struct {
 	PhoneyField string `json:"phoney_field"`
 }
 
+// #[hello.Hello]
+type XXX struct{}
+
+// #[hello.Hello]
+type (
+	// Abc struct
+	// #[hello.Hello]
+	Abc struct{}
+	// #[hello.Hello]
+	Xyz struct{}
+)
+
 func main() {
 	// call generated Hello method
 	var ps PhonyStruct
 	fmt.Println(ps.Hello())
+	fmt.Println()
+
+	var xyz Xyz
+	xyz.Hello()
 	fmt.Println()
 
 	// Create a new file set.

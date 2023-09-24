@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -12,40 +11,31 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 )
 
 var (
-	macroImportPath     string
-	macroOutputFilename string
+	macroPackageImportPath string
 )
 
 func init() {
-	flag.StringVar(&macroImportPath, "by", "", "macro import path")
-	flag.StringVar(&macroOutputFilename, "to", "", "macro output filename")
-	flag.Parse()
-
-	if macroImportPath == "" {
-		fmt.Printf("error: invalid value for flag -by: %q\n", macroImportPath)
+	if len(os.Args) < 2 {
+		fmt.Printf("error: a macro import path must be provided\n")
+		fmt.Printf("usage: %s <import-path>\n", os.Args[0])
 		os.Exit(1)
 	}
 
-	if macroOutputFilename == "" {
-		fmt.Printf("error: invalid value for flag -to: %q\n", macroOutputFilename)
-		os.Exit(1)
-	}
+	macroPackageImportPath = os.Args[1]
 }
 
 func main() {
-	printEnv()
-	defer fmt.Println()
+	var (
+		currentFilename         = os.Getenv("GOFILE")
+		currentWorkingDirectory = os.Getenv("PWD")
+		macroPackageName        = path.Base(macroPackageImportPath)
+	)
 
-	goFile := os.Getenv("GOFILE")
-
-	pkgName := path.Base(macroImportPath)
-
-	hashTagRegexp, err := regexp.Compile(fmt.Sprintf(`#\[%s\.(.*)\]`, pkgName))
+	macroTagRegexp, err := regexp.Compile(fmt.Sprintf(`#\[%s\.(.*)\]`, macroPackageName))
 	if err != nil {
 		fmt.Println(err.Error())
 		os.Exit(3)
@@ -54,53 +44,100 @@ func main() {
 
 	fs := token.NewFileSet()
 
-	file, err := parser.ParseFile(fs, goFile, nil, parser.ParseComments)
+	file, err := parser.ParseFile(fs, currentFilename, nil, parser.ParseComments)
 	if err != nil {
-		fmt.Printf("error: failed parsing %q file: %s\n", goFile, err)
+		fmt.Printf("error: failed parsing %q: %s\n", currentFilename, err)
 		os.Exit(4)
 		return
 	}
 
-	var (
-		macroDefinitionName string
-		programString       string
-	)
-
 	for _, decl := range file.Decls {
 
-		if gd, ok := decl.(*ast.GenDecl); ok && gd.Tok == token.TYPE {
+		if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.TYPE {
 
-			for _, comment := range gd.Doc.List {
-				if submatches := hashTagRegexp.FindStringSubmatch(comment.Text); len(submatches) > 1 {
-					macroDefinitionName = submatches[1]
+			var (
+				macroFunctionName string
+				startOffset       = fs.Position(genDecl.Pos()).Offset
+				endOffset         = fs.Position(genDecl.End()).Offset
+			)
 
+			for _, comment := range genDecl.Doc.List {
+				if submatches := macroTagRegexp.FindStringSubmatch(comment.Text); len(submatches) > 1 {
+					macroFunctionName = submatches[1]
 				}
 			}
 
-			for _, spec := range gd.Specs {
+			// do not proceed if no macro tag found
+			if macroFunctionName == "" {
+				continue
+			}
+
+			for _, spec := range genDecl.Specs {
 				if typeSpec, ok := spec.(*ast.TypeSpec); ok {
 					if _, ok := typeSpec.Type.(*ast.StructType); ok {
 
-						var err error
-						programString, err = generateProgram(
+						needTypePrepend := false
+						structName := typeSpec.Name.Name
+
+						if len(genDecl.Specs) > 1 {
+							startOffset = fs.Position(typeSpec.Pos()).Offset
+							endOffset = fs.Position(typeSpec.End()).Offset
+
+							macroFunctionName = ""
+
+							for _, comment := range typeSpec.Doc.List {
+								if submatches := macroTagRegexp.FindStringSubmatch(comment.Text); len(submatches) > 1 {
+									macroFunctionName = submatches[1]
+								}
+							}
+
+							if macroFunctionName == "" {
+								continue
+							}
+
+							needTypePrepend = true
+						}
+
+						// TODO: spawn a new craftMaterials:
+						// 1. there would be more than one macro invocation
+						// 2. to run in parallel
+
+						macroOutputFilename := buildFilename(structName, macroPackageImportPath, macroFunctionName) + ".gen.go"
+
+						programString, err := generateProgram(
 							Values{
 								Macro: Macro{
-									Name:               macroDefinitionName,
-									CraftedProgramPath: filepath.Join(os.Getenv("PWD"), goFile),
-									PackageImportPath:  macroImportPath,
+									Name:               macroFunctionName,
+									CraftedProgramPath: filepath.Join(currentWorkingDirectory, currentFilename),
+									PackageImportPath:  macroPackageImportPath,
 								},
 								GenDecl: GenDecl{
-									StartOffset: fs.Position(gd.Pos()).Offset,
-									EndOffset:   fs.Position(gd.End()).Offset,
+									StartOffset: startOffset,
+									EndOffset:   endOffset,
 								},
-								OutputFilename: filepath.Join(os.Getenv("PWD"), macroOutputFilename),
-								StructName:     typeSpec.Name.Name,
-								PackageName:    file.Name.Name,
+								NeedTypePrepend: needTypePrepend,
+								OutputFilename:  filepath.Join(currentWorkingDirectory, macroOutputFilename),
+								StructName:      typeSpec.Name.Name,
+								PackageName:     file.Name.Name,
 							},
 						)
 						if err != nil {
 							fmt.Printf("error: failed generating program: %s\n", err)
 							os.Exit(5)
+							return
+						}
+
+						if err := craftMaterials(
+							strings.ReplaceAll(
+								strings.ReplaceAll(currentWorkingDirectory, fmt.Sprintf("%c", filepath.Separator), "."),
+								":",
+								".",
+							),
+							macroOutputFilename,
+							programString,
+						); err != nil {
+							fmt.Println(err.Error())
+							os.Exit(6)
 							return
 						}
 
@@ -110,18 +147,6 @@ func main() {
 
 		}
 	}
-
-	// no hash tags matched macro
-	if programString == "" {
-		return
-	}
-
-	if err := craftMaterials(pkgName, macroDefinitionName+".go", programString); err != nil {
-		fmt.Println(err.Error())
-		os.Exit(6)
-		return
-	}
-
 }
 
 var craftTempDir = "craft"
@@ -181,21 +206,6 @@ func craftMaterials(subDir string, filename string, content string) error {
 	return nil
 }
 
-func printEnv() {
-	_, b, _, _ := runtime.Caller(0)
-	fmt.Println("_, b, _, _ := runtime.Caller(0) =", b)
-	out, err := exec.Command("go", "env", "GOMOD").Output()
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(`out, err := exec.Command("go", "env", "GOMOD").Output() =`, string(out))
-	fmt.Println("\tPWD =", os.Getenv("PWD"))
-	fmt.Println("\tGOARCH =", os.Getenv("GOARCH"))
-	fmt.Println("\tGOOS =", os.Getenv("GOOS"))
-	fmt.Println("\tGOFILE =", os.Getenv("GOFILE"))
-	fmt.Println("\tGOLINE =", os.Getenv("GOLINE"))
-	fmt.Println("\tGOPACKAGE =", os.Getenv("GOPACKAGE"))
-	fmt.Println("\tGOROOT =", os.Getenv("GOROOT"))
-	fmt.Println("\tDOLLAR =", os.Getenv("DOLLAR"))
-	fmt.Println("\tPATH =", os.Getenv("PATH"))
+func buildFilename(structName string, macroPackageImportPath string, macroFunctionName string) string {
+	return strings.ToLower(fmt.Sprintf("%s.%s.%s", structName, strings.ReplaceAll(macroPackageImportPath, "/", "."), macroFunctionName))
 }
