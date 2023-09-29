@@ -33,6 +33,7 @@ func main() {
 		currentFilename         = os.Getenv("GOFILE")
 		currentWorkingDirectory = os.Getenv("PWD")
 		macroPackageName        = path.Base(macroPackageImportPath)
+		fileSet                 = token.NewFileSet()
 	)
 
 	macroTagRegexp, err := regexp.Compile(fmt.Sprintf(`#\[%s\.(.*)\]`, macroPackageName))
@@ -42,68 +43,59 @@ func main() {
 		return
 	}
 
-	fs := token.NewFileSet()
-
-	file, err := parser.ParseFile(fs, currentFilename, nil, parser.ParseComments)
+	astFile, err := parser.ParseFile(fileSet, currentFilename, nil, parser.ParseComments)
 	if err != nil {
 		fmt.Printf("error: failed parsing %q: %s\n", currentFilename, err)
 		os.Exit(4)
 		return
 	}
 
-	for _, decl := range file.Decls {
+	for _, decl := range astFile.Decls {
 
 		if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.TYPE {
 
 			var (
-				startOffset = fs.Position(genDecl.Pos()).Offset
-				endOffset   = fs.Position(genDecl.End()).Offset
+				isGroupTypeSpec          = genDecl.Lparen.IsValid()
+				macroFunctionInvocations = map[string]struct{}{}
 			)
 
-			macroFunctionInvocations := map[string]struct{}{}
-
-			if genDecl.Doc != nil {
-				for _, comment := range genDecl.Doc.List {
-					if submatches := macroTagRegexp.FindStringSubmatch(comment.Text); len(submatches) > 1 {
-						macroFunctionName := submatches[1]
-						macroFunctionInvocations[macroFunctionName] = struct{}{}
+			if !isGroupTypeSpec {
+				if genDecl.Doc != nil {
+					for _, comment := range genDecl.Doc.List {
+						if submatches := macroTagRegexp.FindStringSubmatch(comment.Text); len(submatches) > 1 {
+							macroFunctionName := submatches[1]
+							macroFunctionInvocations[macroFunctionName] = struct{}{}
+						}
 					}
 				}
 			}
 
-			for macroFunctionName, _ := range macroFunctionInvocations {
+			for _, spec := range genDecl.Specs {
 
-				for _, spec := range genDecl.Specs {
-					if typeSpec, ok := spec.(*ast.TypeSpec); ok {
+				if typeSpec, ok := spec.(*ast.TypeSpec); ok {
 
-						needTypePrepend := false
-						typeSpecName := typeSpec.Name.Name
+					var (
+						typeSpecName  = typeSpec.Name.Name
+						startPosition = fileSet.Position(typeSpec.Pos())
+						endPosition   = fileSet.Position(typeSpec.End())
+					)
 
-						// if it was a grouped multiple
-						if len(genDecl.Specs) > 1 {
-							startOffset = fs.Position(typeSpec.Pos()).Offset
-							endOffset = fs.Position(typeSpec.End()).Offset
-
-							macroFunctionName = ""
-
-							if typeSpec.Doc != nil {
-								for _, comment := range typeSpec.Doc.List {
-									if submatches := macroTagRegexp.FindStringSubmatch(comment.Text); len(submatches) > 1 {
-										macroFunctionName = submatches[1]
-									}
+					if isGroupTypeSpec {
+						if typeSpec.Doc != nil {
+							for _, comment := range typeSpec.Doc.List {
+								if submatches := macroTagRegexp.FindStringSubmatch(comment.Text); len(submatches) > 1 {
+									macroFunctionName := submatches[1]
+									macroFunctionInvocations[macroFunctionName] = struct{}{}
 								}
 							}
-
-							if macroFunctionName == "" {
-								continue
-							}
-
-							needTypePrepend = true
 						}
+					}
 
-						// TODO: spawn a new craftMaterials:
-						// 1. there would be more than one macro invocation
-						// 2. to run in parallel
+					// TODO: spawn a new craftMaterials:
+					// 1. there would be more than one macro invocation
+					// 2. to run in parallel
+
+					for macroFunctionName, _ := range macroFunctionInvocations {
 
 						macroOutputFilename := buildFilename(typeSpecName, macroPackageImportPath, macroFunctionName) + ".gen.go"
 
@@ -115,19 +107,26 @@ func main() {
 								},
 								Source: Source{
 									Filepath: filepath.Join(currentWorkingDirectory, currentFilename),
+									StartPosition: Position{
+										Line:   startPosition.Line,
+										Column: startPosition.Column,
+									},
+									EndPosition: Position{
+										Line:   endPosition.Line,
+										Column: endPosition.Column,
+									},
 								},
 								GenDecl: GenDecl{
-									StartOffset: startOffset,
-									EndOffset:   endOffset,
+									StartOffset: startPosition.Offset,
+									EndOffset:   endPosition.Offset,
 								},
 								Output: Output{
 									Filepath: filepath.Join(currentWorkingDirectory, macroOutputFilename),
 								},
 								Template: Template{
 									TypeSpecName: typeSpecName,
-									PackageName:  file.Name.Name,
+									PackageName:  astFile.Name.Name,
 								},
-								NeedTypePrepend: needTypePrepend,
 							},
 						)
 						if err != nil {
@@ -147,12 +146,15 @@ func main() {
 						}
 
 					}
+
 				}
 
 			}
 
 		}
+
 	}
+
 }
 
 var craftTempDir = "craft"
@@ -174,14 +176,15 @@ func craftMaterials(subDir string, filename string, content string) error {
 		return fmt.Errorf("failed to write to the file: %w", err)
 	}
 
-	stdErr := &strings.Builder{}
+	cmdOutput := &strings.Builder{}
 
 	if gomodFile, err := os.Open(filepath.Join(tempPath, "go.mod")); errors.Is(err, os.ErrNotExist) {
 		initCmd := exec.Command("go", "mod", "init", "macro")
-		initCmd.Stderr = stdErr
+		initCmd.Stdout = cmdOutput
+		initCmd.Stderr = cmdOutput
 		initCmd.Dir = tempPath
 		if err := initCmd.Run(); err != nil {
-			return fmt.Errorf("failed to initialize macro module: %w\nerror message:\n%s", err, stdErr.String())
+			return fmt.Errorf("failed to initialize macro module: %s", cmdOutput.String())
 		}
 	} else if err != nil {
 		return fmt.Errorf("failed to open go.mod: %w", err)
@@ -191,22 +194,24 @@ func craftMaterials(subDir string, filename string, content string) error {
 		}
 	}
 
-	stdErr.Reset()
+	cmdOutput.Reset()
 
 	getCmd := exec.Command("go", "get", "-u")
-	getCmd.Stderr = stdErr
+	getCmd.Stdout = cmdOutput
+	getCmd.Stderr = cmdOutput
 	getCmd.Dir = tempPath
 	if err := getCmd.Run(); err != nil {
-		return fmt.Errorf("failed to fetch macro dependencies: %w\nerror message:\n%s", err, stdErr.String())
+		return fmt.Errorf("failed to fetch macro dependencies: %s", cmdOutput.String())
 	}
 
-	stdErr.Reset()
+	cmdOutput.Reset()
 
 	runMacroCmd := exec.Command("go", "run", filename)
-	runMacroCmd.Stderr = stdErr
+	runMacroCmd.Stdout = cmdOutput
+	runMacroCmd.Stderr = cmdOutput
 	runMacroCmd.Dir = tempPath
 	if err := runMacroCmd.Run(); err != nil {
-		return fmt.Errorf("failed to run macro: %w\nerror message:\n%s", err, stdErr.String())
+		return fmt.Errorf("failed to run macro: %s", cmdOutput.String())
 	}
 
 	return nil

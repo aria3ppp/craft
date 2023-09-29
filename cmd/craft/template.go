@@ -46,15 +46,9 @@ func main() {
 
 	f.Close()
 
-	structDef := string(buffer[:bytesRead])
+	typeSpecDef := string(buffer[:bytesRead])
 
-	var src string
-
-	if {{.NeedTypePrepend}} {
-		src = "package main\n\ntype "+ structDef
-	} else {
-		src = "package main\n\n"+ structDef
-	}
+	src := "package main\n\ntype "+ typeSpecDef
 
 	fs := token.NewFileSet()
 
@@ -79,7 +73,7 @@ func main() {
 
 	programTemplate, err := macro.{{.Macro.Name}}(typeSpec)
 	if err != nil {
-		fmt.Println(err.Error())
+		fmt.Println("{{.Source.Filepath}}:{{.Source.StartPosition.Line}}:{{.Source.StartPosition.Column}}:", err.Error())
 		os.Exit(5)
 		return
 	}
@@ -131,12 +125,11 @@ func craft(programString string) error {
 `
 
 type Values struct {
-	Macro           Macro
-	Source          Source
-	GenDecl         GenDecl
-	Output          Output
-	Template        Template
-	NeedTypePrepend bool
+	Macro    Macro
+	Source   Source
+	GenDecl  GenDecl
+	Output   Output
+	Template Template
 }
 
 type Macro struct {
@@ -145,7 +138,14 @@ type Macro struct {
 }
 
 type Source struct {
-	Filepath string
+	Filepath      string
+	StartPosition Position
+	EndPosition   Position
+}
+
+type Position struct {
+	Line   int
+	Column int
 }
 
 type GenDecl struct {
