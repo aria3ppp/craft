@@ -61,9 +61,11 @@ func main() {
 				endOffset         = fs.Position(genDecl.End()).Offset
 			)
 
-			for _, comment := range genDecl.Doc.List {
-				if submatches := macroTagRegexp.FindStringSubmatch(comment.Text); len(submatches) > 1 {
-					macroFunctionName = submatches[1]
+			if genDecl.Doc != nil {
+				for _, comment := range genDecl.Doc.List {
+					if submatches := macroTagRegexp.FindStringSubmatch(comment.Text); len(submatches) > 1 {
+						macroFunctionName = submatches[1]
+					}
 				}
 			}
 
@@ -80,9 +82,11 @@ func main() {
 
 						macroFunctionName = ""
 
-						for _, comment := range typeSpec.Doc.List {
-							if submatches := macroTagRegexp.FindStringSubmatch(comment.Text); len(submatches) > 1 {
-								macroFunctionName = submatches[1]
+						if typeSpec.Doc != nil {
+							for _, comment := range typeSpec.Doc.List {
+								if submatches := macroTagRegexp.FindStringSubmatch(comment.Text); len(submatches) > 1 {
+									macroFunctionName = submatches[1]
+								}
 							}
 						}
 

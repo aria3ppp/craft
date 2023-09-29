@@ -52,7 +52,7 @@ func MarshalJSON(ts *ast.TypeSpec) (string, error) {
 		`package {{.PackageName}}
 	
 func (this *{{.TypeSpecName}}) MarshalJSON() ([]byte, error) {
-	return %q
+	return []byte(%q), nil
 }
 `,
 		structureString,
