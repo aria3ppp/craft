@@ -14,6 +14,7 @@ import (
 )
 
 // #[hello.Hello]
+// #[hello.MarshalJSON]
 // This is a doc #1
 // This is a doc #2
 // This is a doc #3
@@ -22,9 +23,9 @@ type PhonyStruct struct {
 }
 
 // #[hello.Hello]
+// #[hello.MarshalJSON]
 type XXX struct{}
 
-// #[hello.Hello]
 type (
 	// Abc struct
 	// #[hello.Hello]

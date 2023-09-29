@@ -22,8 +22,7 @@ import (
 func main() {
 	startPos, endPos := int64({{.GenDecl.StartOffset}}), int64({{.GenDecl.EndOffset}})
 
-	// TODO: use the correct relative path
-	f, err := os.Open("{{.Macro.CraftedProgramPath}}")
+	f, err := os.Open("{{.Source.Filepath}}")
 	if err != nil {
 		fmt.Println(err.Error())
 		os.Exit(1)
@@ -59,27 +58,26 @@ func main() {
 
 	fs := token.NewFileSet()
 
-	file, err := parser.ParseFile(fs, "snippet.go", src, parser.DeclarationErrors)
+	astFile, err := parser.ParseFile(fs, "", src, parser.DeclarationErrors|parser.AllErrors)
 	if err != nil {
 		fmt.Println(err.Error())
 		os.Exit(4)
 		return
 	}
 
-	var structType *ast.StructType
+	var typeSpec *ast.TypeSpec
 
-	// TODO: is this correct?
-	for _, decl := range file.Decls {
+	for _, decl := range astFile.Decls {
 		if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.TYPE {
 			for _, spec := range genDecl.Specs {
-				if st, isStructType := spec.(*ast.TypeSpec).Type.(*ast.StructType); isStructType {
-					structType = st
+				if ts, isTypeSpec := spec.(*ast.TypeSpec); isTypeSpec {
+					typeSpec = ts
 				}
 			}
 		}
 	}
 
-	programTemplate, err := macro.{{.Macro.Name}}(structType)
+	programTemplate, err := macro.{{.Macro.Name}}(typeSpec)
 	if err != nil {
 		fmt.Println(err.Error())
 		os.Exit(5)
@@ -98,8 +96,8 @@ func main() {
 	if err := tmp.Execute(
 		stringBuilder,
 		map[string]any{
-			"StructName": "{{.StructName}}",
-			"PackageName": "{{.PackageName}}",
+			"TypeSpecName": "{{.Template.TypeSpecName}}",
+			"PackageName": "{{.Template.PackageName}}",
 		},
 	); err != nil {
 		fmt.Println(err.Error())
@@ -112,12 +110,10 @@ func main() {
 		os.Exit(8)
 		return
 	}
-
-	// TODO: make '*.gen.go' file off the template
 }
 
 func craft(programString string) error {
-	file, err := os.Create("{{.OutputFilename}}")
+	file, err := os.Create("{{.Output.Filepath}}")
 	if err != nil {
 		return err
 	}
@@ -136,23 +132,34 @@ func craft(programString string) error {
 
 type Values struct {
 	Macro           Macro
+	Source          Source
 	GenDecl         GenDecl
-	OutputFilename  string
+	Output          Output
+	Template        Template
 	NeedTypePrepend bool
-
-	StructName  string
-	PackageName string
 }
 
 type Macro struct {
-	Name               string
-	CraftedProgramPath string
-	PackageImportPath  string
+	Name              string
+	PackageImportPath string
+}
+
+type Source struct {
+	Filepath string
 }
 
 type GenDecl struct {
 	StartOffset int
 	EndOffset   int
+}
+
+type Output struct {
+	Filepath string
+}
+
+type Template struct {
+	TypeSpecName string
+	PackageName  string
 }
 
 func generateProgram(values Values) (string, error) {

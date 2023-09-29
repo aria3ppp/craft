@@ -1,36 +1,62 @@
 package macro
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 )
 
-func Hello(st *ast.StructType) (string, error) {
-	// structName := st.End()
-	// st.Fields.List[0].Type
+func Hello(ts *ast.TypeSpec) (string, error) {
+	_, isInterfaceType := ts.Type.(*ast.InterfaceType)
 
-	// var x ast.TypeSpec
-	// x.Type.
+	if isInterfaceType {
+		return "", errors.New("Hello do not work on interface types!")
+	}
 
 	programTemplate := `package {{.PackageName}}
 
-func (this *{{.StructName}}) Hello() string {
-	return "Hello {{.StructName}}"
+func (this *{{.TypeSpecName}}) Hello() string {
+	return "Hello {{.TypeSpecName}}"
 }
-	`
+`
 
 	return programTemplate, nil
 }
 
-func MarshalJSON(st *ast.StructType) (string, error) {
-	var program string
-	for _, field := range st.Fields.List {
-		var name string
-		for _, n := range field.Names {
-			name += fmt.Sprintf(", %s", n.String())
+func MarshalJSON(ts *ast.TypeSpec) (string, error) {
+	var structureString string
+
+	switch typ := ts.Type.(type) {
+	case *ast.ArrayType:
+		structureString = "array[<donotknow>]"
+	case *ast.ChanType:
+		return "", errors.New("MarshalJSON do not work on channel types!")
+	case *ast.FuncType:
+		return "", errors.New("MarshalJSON do not work on function types!")
+	case *ast.InterfaceType:
+		return "", errors.New("MarshalJSON do not work on interface types!")
+	case *ast.MapType:
+		structureString = "map[<donknow>]<dontknow>"
+	case *ast.StructType:
+		for _, field := range typ.Fields.List {
+			var name string
+			for _, n := range field.Names {
+				name += fmt.Sprintf(", %s", n.String())
+			}
+			name = name + ":"
+			structureString += fmt.Sprintf("%s, %#v, %#v\n", name, field.Type, field.Tag)
 		}
-		name = name + ":"
-		program += fmt.Sprintf("%s, %#v, %#v\n", name, field.Type, field.Tag)
 	}
-	return program, nil
+
+	programTemplate := fmt.Sprintf(
+		`package {{.PackageName}}
+	
+func (this *{{.TypeSpecName}}) MarshalJSON() ([]byte, error) {
+	return %q
+}
+`,
+		structureString,
+	)
+
+	return programTemplate, nil
 }
