@@ -11,5 +11,7 @@ So at the time we need to pass `*ast.GenDecl` to macro definition.
 ----------------------------------------------------------------------------------------------
 
 Applications:
+ - Add `Clone` derive macro to enable deep clone for every types that need to deep clone feature
+ 	every fields of a struct marked as `Clone` must be `Clone` too. underlying type of a new type also need to be `Clone`
  - JSON efficient serialization/deserialization.
  - Implement efficient and concise SQL model bindings
